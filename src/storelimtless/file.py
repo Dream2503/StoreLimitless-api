@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from shutil import get_terminal_size
 from subprocess import Popen
 from typing import TYPE_CHECKING, Literal
 
@@ -95,7 +96,8 @@ class File:
                 disable=quiet,
                 ascii=" ━",
                 colour="green",
-                bar_format="\033[92m{desc}\033[0m{bar:40}\033[0m \033[92m{n_fmt}/{total_fmt}\033[0m \033[91m{rate_fmt}\033[0m eta \033[96m{remaining}\033[0m",
+                ncols=get_terminal_size().columns,
+                bar_format="\033[92m{desc}\033[0m{bar}\033[0m \033[92m{n_fmt}/{total_fmt}\033[0m \033[91m{rate_fmt}\033[0m eta \033[96m{remaining}\033[0m",
         ) as bar:
             with path.open("wb") as file:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):

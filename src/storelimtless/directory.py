@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from shutil import get_terminal_size
 from time import sleep
 from typing import Literal, TYPE_CHECKING, cast, Iterator
 
@@ -203,7 +204,8 @@ class Directory:
                 disable=quiet,
                 ascii=" ━",
                 colour="green",
-                bar_format="\033[92m{desc}\033[0m{bar:40}\033[0m \033[92m{n_fmt}/{total_fmt}\033[0m \033[91m{rate_fmt}\033[0m eta \033[96m{remaining}\033[0m"
+                ncols=get_terminal_size().columns,
+                bar_format="\033[92m{desc}\033[0m{bar}\033[0m \033[92m{n_fmt}/{total_fmt}\033[0m \033[91m{rate_fmt}\033[0m eta \033[96m{remaining}\033[0m",
         ) as bar:
             while True:
                 response: Response = StoreLimitless.request(self.user.token, "GET", f"/auth/upload/{job_id}/status")
