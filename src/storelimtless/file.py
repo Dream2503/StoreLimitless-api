@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from shutil import get_terminal_size
@@ -14,6 +16,32 @@ from .exception import StoreLimitlessResponseError
 
 if TYPE_CHECKING:
     from .directory import Directory
+
+
+def _find_vlc() -> str:
+    # VLC available through PATH
+    vlc = shutil.which("vlc")
+    if vlc:
+        return vlc
+
+    # Standard Windows VLC installation
+    if os.name == "nt":
+        program_files = os.environ.get("ProgramFiles")
+        program_files_x86 = os.environ.get("ProgramFiles(x86)")
+
+        candidates = [
+            Path(program_files) / "VideoLAN/VLC/vlc.exe"
+            if program_files else None,
+
+            Path(program_files_x86) / "VideoLAN/VLC/vlc.exe"
+            if program_files_x86 else None,
+        ]
+
+        for candidate in candidates:
+            if candidate and candidate.is_file():
+                return str(candidate)
+
+    raise FileNotFoundError("VLC was not found. Please install VLC.")
 
 
 class File:
@@ -112,6 +140,9 @@ class File:
 
         except (ValueError, KeyError, TypeError) as e:
             raise StoreLimitlessResponseError("StoreLimitless server returned an invalid public link response") from e
+
+        if application == "vlc":
+            application = _find_vlc()
 
         process: Popen = Popen([application, f"{StoreLimitless.API_URL}/public/stream/{token}"])
         process.wait()
