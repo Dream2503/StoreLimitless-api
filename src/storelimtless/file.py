@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from shutil import get_terminal_size
 from subprocess import Popen
 from typing import TYPE_CHECKING, Literal
+from urllib import request
 
 from requests import Response
 from tqdm import tqdm
@@ -18,30 +21,58 @@ if TYPE_CHECKING:
     from .directory import Directory
 
 
-def _find_vlc() -> str:
-    # VLC available through PATH
-    vlc = shutil.which("vlc")
+def ensure_vlc() -> str:
+    vlc: str | None = shutil.which("vlc")
+
     if vlc:
         return vlc
 
-    # Standard Windows VLC installation
     if os.name == "nt":
-        program_files = os.environ.get("ProgramFiles")
-        program_files_x86 = os.environ.get("ProgramFiles(x86)")
-
-        candidates = [
-            Path(program_files) / "VideoLAN/VLC/vlc.exe"
-            if program_files else None,
-
-            Path(program_files_x86) / "VideoLAN/VLC/vlc.exe"
-            if program_files_x86 else None,
+        program_files: str | None = os.environ.get("ProgramFiles")
+        program_files_x86: str | None = os.environ.get("ProgramFiles(x86)")
+        candidates: list[Path | None] = [
+            Path(program_files) / "VideoLAN/VLC/vlc.exe" if program_files else None,
+            Path(program_files_x86) / "VideoLAN/VLC/vlc.exe" if program_files_x86 else None
         ]
 
         for candidate in candidates:
             if candidate and candidate.is_file():
                 return str(candidate)
 
-    raise FileNotFoundError("VLC was not found. Please install VLC.")
+        print("VLC is not installed. Downloading and installing VLC for you...")
+        vlc_dir: Path = Path.home() / "AppData" / "Local" / "StoreLimitless" / "vlc"
+        vlc_path: Path = vlc_dir / "vlc.exe"
+        installer: Path = vlc_dir / "vlc-installer.exe"
+        vlc_dir.mkdir(parents=True, exist_ok=True)
+        request.urlretrieve("https://get.videolan.org/vlc/3.0.21/win64/vlc-3.0.21-win64.exe", installer)
+        subprocess.run([str(installer), "/S", f"/D={vlc_dir}"], check=True)
+        installer.unlink(missing_ok=True)
+
+        if vlc_path.is_file():
+            return str(vlc_path)
+
+        raise FileNotFoundError("VLC installation failed.")
+
+    if platform.system() == "Linux":
+        print("VLC is not installed. Installing VLC for you...")
+
+        try:
+            subprocess.run(["sudo", "apt", "update"], check=True)
+            subprocess.run(["sudo", "apt", "install", "-y", "vlc"], check=True)
+
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                "VLC is required, but StoreLimitless could not install it automatically.\n\n"
+                "Please install it manually by running:\n"
+                "sudo apt update && sudo apt install vlc"
+            ) from e
+
+        vlc = shutil.which("vlc")
+
+        if vlc:
+            return vlc
+
+    raise RuntimeError(f"VLC automatic installation is not supported on {platform.system()}.")
 
 
 class File:
@@ -142,7 +173,7 @@ class File:
             raise StoreLimitlessResponseError("StoreLimitless server returned an invalid public link response") from e
 
         if application == "vlc":
-            application = _find_vlc()
+            application = ensure_vlc()
 
         process: Popen = Popen([application, f"{StoreLimitless.API_URL}/public/stream/{token}"])
         process.wait()

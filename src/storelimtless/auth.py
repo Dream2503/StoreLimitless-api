@@ -102,6 +102,7 @@ class StoreLimitless:
         try:
             for _ in range(300):
                 if cls._process.poll() is not None:
+                    cls._process = None
                     raise StoreLimitlessConnectionError("StoreLimitless server stopped before becoming ready")
 
                 try:
