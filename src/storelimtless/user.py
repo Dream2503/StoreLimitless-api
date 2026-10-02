@@ -12,11 +12,12 @@ if TYPE_CHECKING:
 
 
 class User:
-    def __init__(self, token: str, username: str, first_name: str, last_name: str, home: dict[str, int | str | None]) -> None:
+    def __init__(self, token: str, username: str, password: str, first_name: str, last_name: str, home: dict[str, int | str | None]) -> None:
         from .directory import Directory
 
-        self.token = token
+        self.token: str = token
         self.username: str = username
+        self.password: str = password
         self.first_name: str = first_name
         self.last_name: str = last_name
         self._home: Directory = Directory(self,
@@ -48,7 +49,7 @@ class User:
         from .directory import Directory, DirectoryResult
         from .file import File
 
-        directories, files = StoreLimitless.request(self.token, "GET", "/auth/trash", ).json()
+        directories, files = StoreLimitless.request(self, "GET", "/auth/trash", ).json()
         return DirectoryResult([
             Directory(
                 self,

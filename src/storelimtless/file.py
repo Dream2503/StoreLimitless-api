@@ -67,7 +67,7 @@ def ensure_vlc() -> str:
                 "sudo apt update && sudo apt install vlc"
             ) from e
 
-        vlc = shutil.which("vlc")
+        vlc: str | None = shutil.which("vlc")
 
         if vlc:
             return vlc
@@ -78,8 +78,8 @@ def ensure_vlc() -> str:
 class File:
     def __init__(
             self,
-            id: int,
             directory: Directory,
+            id: int,
             name: str,
             type: str,
             size: int,
@@ -87,8 +87,8 @@ class File:
             deleted_at: datetime | None,
             data_center: str
     ) -> None:
-        self.id: int = id
         self.directory: Directory = directory
+        self.id: int = id
         self.name: str = name
         self.type: str = type
         self.size: int = size
@@ -98,8 +98,8 @@ class File:
 
     def __repr__(self) -> str:
         return (
-            f"File(id={self.id}, "
-            f"directory={self.directory!r}, "
+            f"File(directory={self.directory!r}, "
+            f"id={self.id}, "
             f"name={self.name!r}, "
             f"type={self.type!r}, "
             f"size={self.size}, "
@@ -131,12 +131,12 @@ class File:
         path = Path(path) if path is not None else Path(self.name)
 
         try:
-            token: str = StoreLimitless.request(self.directory.user.token, "POST", f"/auth/file/{self.id}/public-link").json()["public_token"]
+            token: str = StoreLimitless.request(self.directory.user, "POST", f"/auth/file/{self.id}/public-link").json()["public_token"]
 
         except (ValueError, KeyError, TypeError) as e:
             raise StoreLimitlessResponseError("StoreLimitless server returned an invalid public link response") from e
 
-        response: Response = StoreLimitless.request(self.directory.user.token, "GET", f"/public/download/{token}", stream=True)
+        response: Response = StoreLimitless.request(self.directory.user, "GET", f"/public/download/{token}", stream=True)
 
         try:
             total: int = int(response.headers.get("Content-Length", self.size))
@@ -167,7 +167,7 @@ class File:
 
     def stream(self, *, application: Literal["vlc"] = "vlc") -> None:
         try:
-            token: str = StoreLimitless.request(self.directory.user.token, "POST", f"/auth/file/{self.id}/public-link").json()["public_token"]
+            token: str = StoreLimitless.request(self.directory.user, "POST", f"/auth/file/{self.id}/public-link").json()["public_token"]
 
         except (ValueError, KeyError, TypeError) as e:
             raise StoreLimitlessResponseError("StoreLimitless server returned an invalid public link response") from e
@@ -179,12 +179,12 @@ class File:
         process.wait()
 
     def rm(self) -> File:
-        StoreLimitless.request(self.directory.user.token, "DELETE", f"/auth/file/{self.id}")
+        StoreLimitless.request(self.directory.user, "DELETE", f"/auth/file/{self.id}")
         return self
 
     def delete(self) -> None:
-        StoreLimitless.request(self.directory.user.token, "DELETE", f"/auth/trash/file/{self.id}")
+        StoreLimitless.request(self.directory.user, "DELETE", f"/auth/trash/file/{self.id}")
 
     def restore(self) -> File:
-        StoreLimitless.request(self.directory.user.token, "POST", f"/auth/trash/file/{self.id}/restore")
+        StoreLimitless.request(self.directory.user, "POST", f"/auth/trash/file/{self.id}/restore")
         return self

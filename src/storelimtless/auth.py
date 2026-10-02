@@ -16,14 +16,14 @@ if TYPE_CHECKING:
 
 
 class StoreLimitless:
-    API_URL: str = "http://127.0.0.1:8000"
+    API_URL: str
     _process: Popen | None = None
 
     def __new__(cls, *args, **kwargs):
         raise TypeError("StoreLimitless cannot be instantiated")
 
     @classmethod
-    def _close(cls) -> None:
+    def close(cls) -> None:
         process = cls._process
         cls._process = None
 
@@ -40,8 +40,8 @@ class StoreLimitless:
             process.wait()
 
     @classmethod
-    def _signal_handler(cls, signum: int, frame) -> None:
-        cls._close()
+    def signal_handler(cls, signum: int, _) -> None:
+        cls.close()
         signal(signum, SIG_DFL)
         raise_signal(signum)
 
@@ -55,13 +55,13 @@ class StoreLimitless:
             return False
 
     @staticmethod
-    def request(token: str | None, method: str, path: str, **kwargs) -> Response:
+    def request(user: User | None, method: str, path: str, **kwargs) -> Response:
         try:
             response: Response = request(
                 method,
                 f"{StoreLimitless.API_URL}{path}",
                 headers={
-                    **({"Authorization": f"Bearer {token}"} if token else {}),
+                    **({"Authorization": f"Bearer {user.token}"} if user else {}),
                     **kwargs.pop("headers", {}),
                 },
                 **kwargs,
@@ -82,12 +82,17 @@ class StoreLimitless:
             except (ValueError, AttributeError):
                 message = response.text
 
+                if user is not None and message == "Invalid token":
+                    user.__dict__.update(StoreLimitless.login(user.username, user.password).__dict__)
+                    return StoreLimitless.request(user, method, **kwargs)
+
             raise StoreLimitlessHTTPError(response.status_code, message or f"HTTP {response.status_code}")
 
         return response
 
     @classmethod
-    def initialize(cls, server_path: str | Path) -> None:
+    def initialize(cls, *, server_path: str | Path, server_ip: str = "http://127.0.0.1:8000") -> None:
+        cls.API_URL = server_ip
         server_path = Path(server_path).expanduser()
 
         if not server_path.is_file():
@@ -96,7 +101,7 @@ class StoreLimitless:
         if cls._is_server_running():
             return
 
-        cls._close()
+        cls.close()
         cls._process = Popen([str(server_path)])
 
         try:
@@ -119,21 +124,17 @@ class StoreLimitless:
             raise StoreLimitlessConnectionError(f"StoreLimitless server failed to become ready at {cls.API_URL}")
 
         except BaseException:
-            cls._close()
+            cls.close()
             raise
 
     @classmethod
-    def close(cls) -> None:
-        cls._close()
-
-    @classmethod
     def login(cls, username: str, password: str) -> User:
+        from .user import User
+
         if cls._process is None and not cls._is_server_running():
             raise StoreLimitlessConnectionError(
                 "StoreLimitless server is not running. Call StoreLimitless.initialize(server_path) or start the StoreLimitless server."
             )
-
-        from .user import User
 
         response: Response = cls.request(
             None,
@@ -144,7 +145,7 @@ class StoreLimitless:
 
         try:
             reply, user, home = response.json()
-            return User(reply["access_token"], **user, home=home)
+            return User(reply["access_token"], **user, password=password, home=home)
 
         except (ValueError, KeyError, TypeError) as e:
             raise StoreLimitlessResponseError("StoreLimitless server returned an invalid login response") from e
@@ -170,5 +171,5 @@ class StoreLimitless:
 
 
 register(StoreLimitless.close)
-signal(SIGINT, StoreLimitless._signal_handler)
-signal(SIGTERM, StoreLimitless._signal_handler)
+signal(SIGINT, StoreLimitless.signal_handler)
+signal(SIGTERM, StoreLimitless.signal_handler)

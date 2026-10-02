@@ -64,7 +64,7 @@ class Directory:
             folders += len(directories)
             files_count += len(files)
             total_size += sum(file.size for file in files)
-            directories_to_visit.extend(directories)
+            directories_to_visit.extend(cast(list[Directory], directories))
 
         unit: str = ""
         size: float = float(total_size)
@@ -91,7 +91,7 @@ class Directory:
         if not name or name in (".", ".."):
             raise ValueError("Invalid folder name")
 
-        StoreLimitless.request(self.user.token, "POST", "/auth/create-folder", params={"directory": str(self.path), "name": name})
+        StoreLimitless.request(self.user, "POST", "/auth/create-folder", params={"directory": str(self.path), "name": name})
         return self
 
     def cd(self, arg: str) -> Directory:
@@ -124,7 +124,7 @@ class Directory:
     @property
     def ls(self) -> DirectoryResult:
         current_directory = str(self.path)
-        directories, files = StoreLimitless.request(self.user.token, "GET", "/auth/directory", params={"directory": current_directory}).json()
+        directories, files = StoreLimitless.request(self.user, "GET", "/auth/directory", params={"directory": current_directory}).json()
 
         return DirectoryResult([
             Directory(
@@ -136,8 +136,8 @@ class Directory:
             ) for directory in directories
         ], [
             File(
-                file["id"],
                 self,
+                file["id"],
                 file["name"],
                 file["type"],
                 file["size"],
@@ -158,7 +158,7 @@ class Directory:
             child_directories, child_files = directory.ls
             directories.extend(directory for directory in child_directories if all(word in directory.path.name.lower() for word in query))
             files.extend(file for file in child_files if all(word in file.name.lower() for word in query))
-            directories_to_visit.extend(child_directories)
+            directories_to_visit.extend(cast(list[Directory], child_directories))
 
         return DirectoryResult(directories, files)
 
@@ -168,7 +168,7 @@ class Directory:
 
             with path.open("rb") as file:
                 response: Response = StoreLimitless.request(
-                    self.user.token,
+                    self.user,
                     "POST",
                     "/auth/upload",
                     headers={
@@ -181,7 +181,7 @@ class Directory:
                 )
         else:
             response: Response = StoreLimitless.request(
-                self.user.token,
+                self.user,
                 "POST",
                 "/auth/upload-link",
                 params={
@@ -208,7 +208,7 @@ class Directory:
                 bar_format="\033[92m{desc}\033[0m{bar}\033[0m \033[92m{n_fmt}/{total_fmt}\033[0m \033[91m{rate_fmt}\033[0m eta \033[96m{remaining}\033[0m",
         ) as bar:
             while True:
-                response: Response = StoreLimitless.request(self.user.token, "GET", f"/auth/upload/{job_id}/status")
+                response: Response = StoreLimitless.request(self.user, "GET", f"/auth/upload/{job_id}/status")
 
                 try:
                     status: dict[str, str | int] = response.json()
@@ -216,7 +216,7 @@ class Directory:
                 except (ValueError, KeyError, TypeError) as e:
                     raise StoreLimitlessResponseError("StoreLimitless server returned an invalid upload status") from e
 
-                bar.total = status["total"]
+                bar.total = cast(int, status["total"])
                 bar.n = status["transfer"]
                 bar.set_description(cast(str, status["message"]), refresh=False)
                 bar.refresh()
@@ -236,12 +236,12 @@ class Directory:
         raise StoreLimitlessResponseError(f"Upload completed but file {status["file_id"]} could not be found")
 
     def rm(self) -> Directory:
-        StoreLimitless.request(self.user.token, "DELETE", f"/auth/directory/{self.id}")
+        StoreLimitless.request(self.user, "DELETE", f"/auth/directory/{self.id}")
         return self
 
     def delete(self) -> None:
-        StoreLimitless.request(self.user.token, "DELETE", f"/auth/trash/directory/{self.id}")
+        StoreLimitless.request(self.user, "DELETE", f"/auth/trash/directory/{self.id}")
 
     def restore(self) -> Directory:
-        StoreLimitless.request(self.user.token, "POST", f"/auth/trash/directory/{self.id}/restore")
+        StoreLimitless.request(self.user, "POST", f"/auth/trash/directory/{self.id}/restore")
         return self
